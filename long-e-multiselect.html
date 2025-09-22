@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Find All the Long E Words — Multi-Select</title>
+  <style>
+    :root{
+      --bg:#f7f7f8; --panel:#fff; --ink:#111827; --muted:#6b7280;
+      --ok:#16a34a; --bad:#dc2626; --focus:#3b82f6; --border:#e5e7eb;
+      --chip:#f3f4f6;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font:16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+    .wrap{ width:min(900px,100%); }
+    .card{
+      background:var(--panel); border:1px solid var(--border); border-radius:16px;
+      box-shadow:0 6px 20px rgba(0,0,0,.06); padding:28px;
+    }
+    h1{ margin:0 0 6px; font-size:clamp(20px,3.2vw,28px); }
+    p.lead{ margin:0 0 12px; color:var(--muted); }
+    .meta{ display:flex; gap:12px; align-items:center; color:var(--muted); margin:8px 0 0; }
+    .badge{ background:#eef2ff; border:1px solid #e5e7eb; padding:4px 8px; border-radius:999px; font-weight:700; font-size:13px; color:#3730a3; }
+    .grid{
+      display:grid; gap:10px;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      margin:14px 0 6px;
+    }
+    button.word{
+      padding:14px 12px; border-radius:12px; border:2px solid var(--border);
+      background:var(--chip); cursor:pointer; font-weight:800; font-size:18px;
+    }
+    button.word.selected{ border-color:#a5b4fc; background:#eef2ff; }
+    button.word:focus-visible{ outline:3px solid var(--focus); outline-offset:2px; }
+    button.word[disabled]{ opacity:.8; cursor:not-allowed; }
+    .word.ok{ background:#ecfdf5; border-color:#bbf7d0; }
+    .word.bad{ background:#fef2f2; border-color:#fecaca; }
+    .word.missed{ background:#fff7ed; border-color:#fed7aa; }
+    .msg{ min-height:1.5em; font-weight:700; margin:8px 0 0; }
+    .msg.ok{ color:var(--ok); }
+    .msg.bad{ color:var(--bad); }
+    footer{
+      display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+      gap:10px; color:var(--muted); margin-top:14px;
+    }
+    .score{ font-weight:800; color:var(--ink); }
+    .controls{ display:flex; gap:10px; }
+    .btn{
+      padding:10px 14px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .btn:hover{ filter:brightness(.98); }
+    .sr-only{ position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card" role="region" aria-labelledby="t">
+      <h1 id="t">Find all the long e words</h1>
+      <p class="lead">Click <strong>every word</strong> that has the long e sound /ē/. Then press <strong>Check</strong>. (Words are shuffled on load.)</p>
+
+      <div class="meta">
+        <span class="badge" id="progress">Found 0 of 19</span>
+      </div>
+
+      <div class="grid" id="wordGrid" role="group" aria-label="Word choices"></div>
+      <div id="feedback" class="msg" aria-live="polite" aria-atomic="true"></div>
+
+      <footer>
+        <div class="score" aria-live="polite" aria-atomic="true">Score: <span id="score">0/19</span></div>
+        <div class="controls">
+          <button id="check" class="btn" type="button">Check</button>
+          <button id="reset" class="btn" type="button">Reset</button>
+          <button id="shuffle" class="btn" type="button">Shuffle &amp; Restart</button>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    // ====== Word List (from user) ======
+    const WORDS = [
+      "me","he","she","we","beeat","each","team","read (present tense)","leave","easy","seat","teach","see","keep","feel","week","free","meet","sleep","street"
+    ];
+
+    // Treat all valid English words with long e as targets; "beeat" is a distractor.
+    const TARGETS = new Set([
+      "me","he","she","we","each","team","read (present tense)","leave","easy","seat","teach","see","keep","feel","week","free","meet","sleep","street"
+    ]);
+
+    const WRONG_FEEDBACK = [
+      "Not quite. Try again.",
+      "Still not it — give it another shot."
+    ];
+
+    // ====== State ======
+    let wrongIndex = 0;
+    let selected = new Set();
+    let locked = false;
+
+    // ====== Helpers ======
+    function shuffle(arr){
+      for(let i=arr.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]]=[arr[j],arr[i]];
+      }
+    }
+    function setFeedback(ok, textOk="Keep going — then press Check."){
+      const fb = document.getElementById('feedback');
+      fb.textContent = ok ? textOk : WRONG_FEEDBACK[(wrongIndex++) % WRONG_FEEDBACK.length];
+      fb.className = "msg " + (ok ? "ok" : "bad");
+    }
+    function updateHUD(){
+      const found = [...selected].filter(w => TARGETS.has(w)).length;
+      document.getElementById('progress').textContent = "Found " + found + " of " + TARGETS.size;
+      document.getElementById('score').textContent = found + "/" + TARGETS.size;
+    }
+
+    function render(){
+      locked = false;
+      selected.clear();
+      const grid = document.getElementById('wordGrid');
+      grid.innerHTML = "";
+      const items = [...WORDS];
+      shuffle(items);
+      items.forEach(word => {
+        const btn = document.createElement('button');
+        btn.className = "word";
+        btn.type = "button";
+        btn.textContent = word;
+        btn.addEventListener('click', ()=>{
+          if(locked) return;
+          if(selected.has(word)){
+            selected.delete(word);
+            btn.classList.remove('selected');
+          }else{
+            selected.add(word);
+            btn.classList.add('selected');
+          }
+          updateHUD();
+        });
+        grid.appendChild(btn);
+      });
+      updateHUD();
+      setFeedback(true, "Select all the long e words, then press Check.");
+    }
+
+    // ====== Check ======
+    document.getElementById('check').addEventListener('click', ()=>{
+      if(locked) return;
+      locked = true;
+      const btns = [...document.querySelectorAll('.word')];
+      let allCorrect = true;
+      btns.forEach(btn => {
+        const w = btn.textContent;
+        const isTarget = TARGETS.has(w);
+        const isChosen = selected.has(w);
+        btn.disabled = true;
+        if(isTarget && isChosen){
+          btn.classList.remove('selected');
+          btn.classList.add('ok');
+        }else if(!isTarget && isChosen){
+          btn.classList.remove('selected');
+          btn.classList.add('bad');
+          allCorrect = false;
+        }else if(isTarget && !isChosen){
+          btn.classList.add('missed');
+          allCorrect = false;
+        }
+      });
+      if(allCorrect){
+        setFeedback(true, "Perfect! You found all the long e words.");
+      }else{
+        setFeedback(false);
+      }
+    });
+
+    // ====== Reset / Shuffle ======
+    document.getElementById('reset').addEventListener('click', ()=>{
+      locked = false;
+      selected.clear();
+      const btns = [...document.querySelectorAll('.word')];
+      btns.forEach(b => {
+        b.disabled = false;
+        b.classList.remove('ok','bad','missed','selected');
+      });
+      updateHUD();
+      setFeedback(true, "Reset. Try again.");
+    });
+    document.getElementById('shuffle').addEventListener('click', render);
+
+    // ====== Init ======
+    render();
+  </script>
+</body>
+</html>
