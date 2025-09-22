@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Long E (ee / ea) — 10 Questions</title>
+  <style>
+    :root{
+      --bg:#f7f7f8; --panel:#fff; --ink:#111827; --muted:#6b7280;
+      --ok:#16a34a; --bad:#dc2626; --focus:#3b82f6; --border:#e5e7eb;
+      --chip:#f3f4f6;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font:16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial;
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+    .wrap{ width:min(900px,100%); }
+    .card{
+      background:var(--panel); border:1px solid var(--border); border-radius:16px;
+      box-shadow:0 6px 20px rgba(0,0,0,.06); padding:28px;
+    }
+    h1{ margin:0 0 6px; font-size:clamp(20px,3.2vw,28px); }
+    p.lead{ margin:0 0 18px; color:var(--muted); }
+    .meta{ display:flex; gap:12px; align-items:center; color:var(--muted); margin:8px 0 0; }
+    .badge{ background:#eef2ff; border:1px solid #e5e7eb; padding:4px 8px; border-radius:999px; font-weight:700; font-size:13px; color:#3730a3; }
+    .qbox{ margin:14px 0 6px; padding:14px; background:#fafafa; border:1px solid var(--border); border-radius:12px; }
+    .grid{
+      display:grid; gap:10px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin:12px 0 6px;
+    }
+    button.choice{
+      padding:14px 12px; border-radius:12px; border:1px solid var(--border);
+      background:var(--chip); cursor:pointer; font-weight:800; font-size:18px;
+    }
+    button.choice:focus-visible{ outline:3px solid var(--focus); outline-offset:2px; }
+    button.choice[disabled]{ opacity:.8; cursor:not-allowed; }
+    .choice.ok{ background:#ecfdf5; border-color:#bbf7d0; }
+    .choice.bad{ background:#fef2f2; border-color:#fecaca; }
+    .msg{ min-height:1.5em; font-weight:700; margin:8px 0 0; }
+    .msg.ok{ color:var(--ok); }
+    .msg.bad{ color:var(--bad); }
+    footer{
+      display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+      gap:10px; color:var(--muted); margin-top:14px;
+    }
+    .score{ font-weight:800; color:var(--ink); }
+    .controls{ display:flex; gap:10px; }
+    .btn{
+      padding:10px 14px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .btn:hover{ filter:brightness(.98); }
+    .sr-only{ position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card" role="region" aria-labelledby="t">
+      <h1 id="t">Long E — ee / ea</h1>
+      <p class="lead">Prompt: <strong>Which word has the long e sound /ē/?</strong> (Spelled with <strong>ee</strong> or <strong>ea</strong>.) Ten questions, four choices each.</p>
+
+      <div class="meta">
+        <span class="badge" id="qnum">Q 1/10</span>
+        <span class="badge" id="progress">0 correct</span>
+      </div>
+
+      <div class="qbox">
+        <h2 class="sr-only" id="qLabel">Pick the long e word</h2>
+        <div class="grid" id="choices" role="group" aria-labelledby="qLabel"></div>
+        <div id="feedback" class="msg" aria-live="polite" aria-atomic="true"></div>
+      </div>
+
+      <footer>
+        <div class="score" aria-live="polite" aria-atomic="true">Score: <span id="score">0/10</span></div>
+        <div class="controls">
+          <button id="next" class="btn" type="button" disabled>Next</button>
+          <button id="restart" class="btn" type="button">Restart</button>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    // ====== Word Pools ======
+    // Long E spelled "ee"
+    const EE_WORDS = ["need","keep","feel","week","free","meet","sleep","street","green","tree"];
+    // Long E spelled "ea" — include your list
+    const EA_LONG = ["eat","team","read","leave","easy","seat","teach"];
+    const LONG_E = [...EE_WORDS, ...EA_LONG];
+
+    // Beginner-friendly distractors (NOT long e). Include tricky 'ea' that aren't long e.
+    const DISTRACTORS = [
+      // short e words
+      "bed","men","pet","red","ten","net","step","help","let","pen","leg","desk",
+      "best","next","belt","bell","hen","wet","nest","well",
+      // 'ea' but NOT long e
+      "head","bread","dead","sweat","meant","ready","breakfast","instead",
+      // 'ea' with long a to challenge
+      "great","steak",
+      // some short non-e
+      "cat","pin","hop","sun"
+    ];
+
+    const QUESTIONS_COUNT = 10;
+    const CHOICES_PER_Q = 4;
+
+    const WRONG_FEEDBACK = [
+      "Not quite. Try again.",
+      "Still not it — give it another shot."
+    ];
+
+    // ====== State ======
+    let wrongIndex = 0;
+    let currentIndex = 0;
+    let score = 0;
+    let questions = []; // [{answer, options:[], correctIdx}]
+    let locked = false;
+
+    // ====== Helpers ======
+    function shuffle(arr){
+      for(let i=arr.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]]=[arr[j],arr[i]];
+      }
+    }
+    function sampleDistinct(pool, n, exceptSet=new Set()){
+      const items = pool.filter(w=>!exceptSet.has(w));
+      shuffle(items);
+      return items.slice(0,n);
+    }
+    function setFeedback(ok, textOk="Correct!"){
+      const fb = document.getElementById('feedback');
+      fb.textContent = ok ? textOk : WRONG_FEEDBACK[(wrongIndex++) % WRONG_FEEDBACK.length];
+      fb.className = "msg " + (ok ? "ok" : "bad");
+    }
+    function updateHUD(){
+      document.getElementById('qnum').textContent = "Q " + (currentIndex+1) + "/" + QUESTIONS_COUNT;
+      document.getElementById('score').textContent = score + "/" + QUESTIONS_COUNT;
+      document.getElementById('progress').textContent = score + " correct";
+    }
+
+    // ====== Build Questions ======
+    function buildQuestions(){
+      const answers = [...LONG_E];
+      shuffle(answers);
+      const chosenAnswers = answers.slice(0, QUESTIONS_COUNT); // 10 answers
+      questions = chosenAnswers.map(ans => {
+        const opts = sampleDistinct(DISTRACTORS, CHOICES_PER_Q-1, new Set([ans]));
+        opts.push(ans);
+        shuffle(opts);
+        return {
+          answer: ans,
+          options: opts,
+          correctIdx: opts.indexOf(ans)
+        };
+      });
+    }
+
+    // ====== Render Current Question ======
+    function renderQuestion(){
+      locked = false;
+      const box = document.getElementById('choices');
+      box.innerHTML = "";
+      const q = questions[currentIndex];
+      q.options.forEach((word, idx)=>{
+        const btn = document.createElement('button');
+        btn.className = "choice";
+        btn.type = "button";
+        btn.textContent = word;
+        btn.addEventListener('click', ()=>{
+          if(locked) return;
+          if(idx === q.correctIdx){
+            btn.classList.add('ok');
+            score += 1;
+            setFeedback(true);
+            locked = true;
+            // disable siblings
+            [...box.children].forEach(b => b.disabled = true);
+            document.getElementById('next').disabled = false;
+            updateHUD();
+          }else{
+            btn.classList.add('bad');
+            btn.animate([{transform:'translateX(0)'},{transform:'translateX(-2px)'},{transform:'translateX(2px)'},{transform:'translateX(0)'}],{duration:200,iterations:1});
+            setFeedback(false);
+          }
+        });
+        box.appendChild(btn);
+      });
+      setFeedback(true, "Which word has the long e sound? Pick one.");
+      document.getElementById('next').disabled = true;
+      updateHUD();
+    }
+
+    // ====== Controls ======
+    document.getElementById('next').addEventListener('click', ()=>{
+      if(currentIndex < QUESTIONS_COUNT-1){
+        currentIndex += 1;
+        renderQuestion();
+      }else{
+        // finished
+        setFeedback(true, "All done! You scored " + score + "/" + QUESTIONS_COUNT + ".");
+        document.getElementById('next').disabled = true;
+      }
+    });
+
+    document.getElementById('restart').addEventListener('click', ()=>{
+      wrongIndex = 0;
+      currentIndex = 0;
+      score = 0;
+      buildQuestions();
+      renderQuestion();
+    });
+
+    // ====== Init ======
+    buildQuestions();
+    renderQuestion();
+  </script>
+</body>
+</html>
