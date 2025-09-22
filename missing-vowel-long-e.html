@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fill in the Missing Vowel — Long E</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f7f7f8;
+      color: #111827;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; margin: 0; padding: 20px;
+    }
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 16px;
+      max-width: 700px; width: 100%;
+      box-shadow: 0 6px 20px rgba(0,0,0,.08);
+    }
+    h1 { margin-top: 0; }
+    .badge { display: inline-block; margin-right: 8px;
+      background: #eef2ff; color: #3730a3;
+      border-radius: 999px; padding: 4px 10px; font-weight: 700; }
+    .qbox {
+      margin: 20px 0; padding: 16px;
+      background: #fafafa; border-radius: 12px; border: 1px solid #e5e7eb;
+    }
+    input {
+      font-size: 20px; padding: 6px 10px; border: 1px solid #ccc;
+      border-radius: 6px; width: 120px;
+    }
+    button {
+      padding: 8px 14px; font-weight: 600;
+      border: 1px solid #e5e7eb; border-radius: 10px; cursor: pointer;
+      margin-top: 10px; background: #fff;
+    }
+    button:hover { filter: brightness(.97); }
+    .msg { font-weight: 700; margin-top: 8px; min-height: 1.5em; }
+    .ok { color: #16a34a; }
+    .bad { color: #dc2626; }
+    footer { margin-top: 20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Fill in the Missing Vowel</h1>
+    <p class="lead">Type the missing vowel(s) to complete the word. (ee, ea, or e)</p>
+    <div>
+      <span class="badge" id="qnum">Q 1/20</span>
+      <span class="badge" id="progress">0 correct</span>
+    </div>
+
+    <div class="qbox">
+      <h2 id="prompt"></h2>
+      <input id="answer" type="text" placeholder="Type here" autocomplete="off" />
+      <button id="check">Check</button>
+      <div id="feedback" class="msg"></div>
+    </div>
+
+    <footer>
+      <div class="score">Score: <span id="score">0/20</span></div>
+      <div>
+        <button id="next" disabled>Next</button>
+        <button id="restart">Restart</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const WORDS = [
+      "see","keep","feel","week","free","meet","sleep","street",
+      "eat","each","team","read","leave","easy","seat","teach",
+      "me","he","she","we","be"
+    ];
+
+    let currentIndex = 0, score = 0, questions = [];
+
+    function shuffle(arr){
+      for(let i=arr.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]]=[arr[j],arr[i]];
+      }
+    }
+
+    function makeBlank(word){
+      if(word.includes("ee")) return word.replace("ee","__");
+      if(word.includes("ea")) return word.replace("ea","__");
+      return word.replace("e","_"); // single e
+    }
+
+    function buildQuestions(){
+      questions = [...WORDS];
+      shuffle(questions);
+      questions = questions.slice(0,20);
+    }
+
+    function renderQuestion(){
+      document.getElementById("feedback").textContent = "";
+      document.getElementById("answer").value = "";
+      document.getElementById("check").disabled = false;
+      document.getElementById("next").disabled = true;
+      const word = questions[currentIndex];
+      document.getElementById("prompt").textContent = makeBlank(word);
+      document.getElementById("qnum").textContent = "Q "+(currentIndex+1)+"/20";
+      document.getElementById("score").textContent = score+"/20";
+      document.getElementById("progress").textContent = score+" correct";
+    }
+
+    document.getElementById("check").addEventListener("click", ()=>{
+      const input = document.getElementById("answer").value.trim().toLowerCase();
+      const correct = questions[currentIndex];
+      let ok = false;
+      if(correct.includes("ee") && input==="ee") ok = true;
+      if(correct.includes("ea") && input==="ea") ok = true;
+      if(correct.includes("e") && !correct.includes("ee") && !correct.includes("ea") && input==="e") ok = true;
+
+      const fb = document.getElementById("feedback");
+      if(ok){
+        fb.textContent = "Correct! "+correct;
+        fb.className = "msg ok";
+        score++;
+        document.getElementById("check").disabled = true;
+        document.getElementById("next").disabled = false;
+      }else{
+        fb.textContent = "Try again.";
+        fb.className = "msg bad";
+      }
+      document.getElementById("score").textContent = score+"/20";
+      document.getElementById("progress").textContent = score+" correct";
+    });
+
+    document.getElementById("next").addEventListener("click", ()=>{
+      if(currentIndex < 19){
+        currentIndex++;
+        renderQuestion();
+      } else {
+        document.getElementById("feedback").textContent =
+          "All done! You scored "+score+"/20.";
+        document.getElementById("feedback").className = "msg ok";
+        document.getElementById("check").disabled = true;
+        document.getElementById("next").disabled = true;
+      }
+    });
+
+    document.getElementById("restart").addEventListener("click", ()=>{
+      score = 0;
+      currentIndex = 0;
+      buildQuestions();
+      renderQuestion();
+    });
+
+    // init
+    buildQuestions();
+    renderQuestion();
+  </script>
+</body>
+</html>
