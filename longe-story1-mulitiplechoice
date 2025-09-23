@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Story Quiz — Random</title>
+  <style>
+    :root{
+      --bg:#f7f7f8; --panel:#ffffff; --ink:#111827; --muted:#6b7280;
+      --ok:#16a34a; --bad:#dc2626; --focus:#2563eb; --border:#e5e7eb;
+    }
+    body{ margin:0; padding:24px; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    h1{ margin:0 0 12px 0; font-size:clamp(22px,2.8vw,30px) }
+    .story{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px; }
+    .quiz{ display:grid; gap:14px; }
+    .card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .qhead{ font-weight:600; margin-bottom:8px; }
+    .feedback{ margin-top:6px; font-weight:700 }
+    .correct{ color:var(--ok) }
+    .incorrect{ color:var(--bad) }
+    .score{ position:sticky; bottom:0; background:rgba(247,247,248,.9); backdrop-filter:saturate(160%) blur(6px);
+      border-top:1px solid var(--border); padding:10px 14px; margin-top:16px; display:flex; justify-content:space-between; }
+    button{ padding:8px 12px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer; font-weight:600 }
+    button.primary{ background:#111827; color:#fff; border-color:#111827 }
+    label{ display:block; margin:6px 0 }
+  </style>
+</head>
+<body>
+  <h1>Read and Answer</h1>
+  <div class="story">
+    <p>We are a happy team at school. Each student has a book, and reading is easy for us. We eat lunch together every day. I feel good because I am free to play after class. He likes football and she likes music. We keep our classroom clean. We leave school at 3 o’clock. My friends help me, and I meet them after school. We read stories, then sleep early. Our teachers teach us new things. We are sometimes strong and sometimes weak, but we always learn. The week has seven days, and we study for five of them.</p>
+  </div>
+
+  <div id="quiz" class="quiz"></div>
+
+  <div class="score">
+    <div id="scoreText"><strong>Score:</strong> 0/0</div>
+    <div><button id="reload" class="primary">New Random Set</button></div>
+  </div>
+
+<script>
+// --------- Data (big pool) ---------
+const QUESTION_POOL = [
+  { q:"Do we live in London?", options:["Yes, we live in London.","No, we do not live in London."], correct:1 },
+  { q:"Do we eat lunch together every day?", options:["Yes, we eat lunch together every day.","No, we never eat lunch together."], correct:0 },
+  { q:"Does he like music?", options:["Yes, he likes music.","No, he likes football."], correct:1 },
+  { q:"Does she like football?", options:["Yes, she likes football.","No, she likes music."], correct:1 },
+  { q:"Do we leave school at 3 o’clock?", options:["Yes, we leave school at 3 o’clock.","No, we leave at 5 o’clock."], correct:0 },
+  { q:"Does the week have seven days?", options:["Yes, the week has seven days.","No, the week has five days."], correct:0 },
+  { q:"Do my friends help me?", options:["Yes, my friends help me.","No, my friends do not help me."], correct:0 },
+  { q:"Do we read stories?", options:["Yes, we read stories.","No, we do not read stories."], correct:0 },
+  { q:"Do we sleep late?", options:["Yes, we sleep late.","No, we sleep early."], correct:1 },
+  { q:"Are we sometimes strong and sometimes weak?", options:["Yes, we are sometimes strong and sometimes weak.","No, we are always strong."], correct:0 },
+  { q:"Do our teachers teach us new things?", options:["Yes, our teachers teach us new things.","No, our teachers do not teach us new things."], correct:0 },
+  { q:"Do we study all seven days?", options:["Yes, we study all seven days.","No, we study for five days."], correct:1 }
+];
+
+// --------- Helpers ---------
+function shuffle(arr){
+  const a=arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+const quizEl=document.getElementById("quiz");
+const scoreText=document.getElementById("scoreText");
+const reloadBtn=document.getElementById("reload");
+
+let wrongCount={}, solved={}, score=0, selected=[];
+
+function buildQuiz(){
+  quizEl.innerHTML="";
+  score=0; solved={}; wrongCount={};
+
+  // choose random 5 questions from pool
+  selected=shuffle(QUESTION_POOL).slice(0,5);
+
+  selected.forEach((q,i)=>{
+    const card=document.createElement("div");
+    card.className="card";
+    card.innerHTML=`
+      <div class="qhead">Q${i+1}. ${q.q}</div>
+      ${q.options.map((opt,idx)=>`<label><input type="radio" name="q${i}" value="${idx}"> ${opt}</label>`).join("")}
+      <div><button class="primary" data-action="check" data-idx="${i}">Check</button></div>
+      <div id="fb-${i}" class="feedback" aria-live="polite"></div>
+    `;
+    quizEl.appendChild(card);
+  });
+  updateScore();
+}
+
+function updateScore(){
+  scoreText.innerHTML=`<strong>Score:</strong> ${score}/${selected.length}`;
+}
+
+quizEl.addEventListener("click", e=>{
+  const btn=e.target.closest("button");
+  if(!btn) return;
+  if(btn.dataset.action==="check") handleCheck(Number(btn.dataset.idx));
+});
+
+function handleCheck(idx){
+  if(solved[idx]) return;
+  const radios=document.querySelectorAll(`input[name="q${idx}"]`);
+  let selectedOpt=[...radios].find(r=>r.checked);
+  const fb=document.getElementById(`fb-${idx}`);
+  if(!selectedOpt){
+    fb.textContent="Please select an answer.";
+    fb.className="feedback incorrect";
+    return;
+  }
+  const val=Number(selectedOpt.value);
+  if(val===selected[idx].correct){
+    fb.textContent="Correct!";
+    fb.className="feedback correct";
+    solved[idx]=true;
+    score++;
+    updateScore();
+  } else {
+    wrongCount[idx]=(wrongCount[idx]||0)+1;
+    fb.textContent=(wrongCount[idx]%2===0)?"Sorry, that is incorrect.":"No, that's wrong.";
+    fb.className="feedback incorrect";
+  }
+}
+
+reloadBtn.addEventListener("click", buildQuiz);
+
+// init
+buildQuiz();
+</script>
+</body>
+</html>
+
