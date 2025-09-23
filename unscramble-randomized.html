@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sentence Unscramble — 15 Random Each Time</title>
+  <style>
+    :root{
+      --bg:#f7f7f8; --panel:#ffffff; --ink:#111827; --muted:#6b7280;
+      --ok:#16a34a; --bad:#dc2626; --focus:#2563eb; --border:#e5e7eb;
+    }
+    *{ box-sizing:border-box }
+    html,body{ height:100% }
+    body{
+      margin:0; padding:24px; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+      background:var(--bg); color:var(--ink);
+    }
+    h1{ margin:0 0 8px 0; font-size: clamp(20px, 2.6vw, 28px); }
+    p.lead{ margin:0 0 20px 0; color:var(--muted) }
+    .quiz{ display:grid; gap:14px; }
+    .card{
+      background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .qhead{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .scramble{ font-weight:600 }
+    .controls{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    input[type="text"]{
+      width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-size:16px;
+    }
+    input[type="text"]:focus{ outline:2px solid var(--focus); outline-offset:1px; }
+    .feedback{ margin-top:6px; font-weight:700 }
+    .correct{ color:var(--ok) }
+    .incorrect{ color:var(--bad) }
+    .score{
+      position:sticky; bottom:0; background:rgba(247,247,248,.9);
+      backdrop-filter:saturate(160%) blur(6px);
+      border-top:1px solid var(--border); padding:10px 14px; margin-top:16px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    button{
+      padding:8px 12px; border:1px solid var(--border); background:#fff; border-radius:10px; cursor:pointer;
+      font-weight:600;
+    }
+    button.primary{ background:#111827; color:#fff; border-color:#111827; }
+    button:disabled{ opacity:.6; cursor:not-allowed }
+    small.hint{ color:var(--muted) }
+    .answer { margin-top:6px; color:#0f172a; font-style:italic }
+  </style>
+</head>
+<body>
+  <h1>Unscramble the Sentences</h1>
+  <p class="lead">Fifteen questions are chosen at random each time. Type the sentence exactly (capital letter and punctuation). Press <em>Check</em>. Wrong attempts alternate feedback so you know your click was received.</p>
+
+  <div id="quiz" class="quiz" role="list"></div>
+
+  <div class="score">
+    <div id="scoreText"><strong>Score:</strong> 0/0</div>
+    <div><button id="reload" class="primary" aria-label="Reload with a new random set">New Random Set</button></div>
+  </div>
+
+<script>
+// ---------- Data (pool of sentences) ----------
+const SENTENCES = [
+  "I am happy.",
+  "Each boy has a book.",
+  "English is easy.",
+  "They eat apples.",
+  "I feel good.",
+  "She is free today.",
+  "He plays football.",
+  "We keep the room clean.",
+  "They leave at 8 o’clock.",
+  "You help me.",
+  "I meet my friend after school.",
+  "We read every day.",
+  "She likes cats.",
+  "I sleep at night.",
+  "Teachers teach children.",
+  "The team plays well.",
+  "We live in London.",
+  "He is weak.",
+  "The week has seven days."
+];
+
+// ---------- Helpers ----------
+function shuffle(a) {
+  // Fisher-Yates shuffle for better randomness
+  const arr = a.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function scrambleWords(sentence) {
+  // Keep punctuation attached to last token as typed; split by spaces is enough for these sentences
+  const parts = sentence.split(" ");
+  return shuffle(parts).join(" ");
+}
+
+// ---------- Build Quiz ----------
+const quizEl = document.getElementById("quiz");
+const reloadBtn = document.getElementById("reload");
+const scoreText = document.getElementById("scoreText");
+
+let selected = [];        // chosen 15
+let states = [];          // per-question state: {answer, wrongCount, solved}
+let score = 0;
+
+function buildQuiz() {
+  quizEl.innerHTML = "";
+  score = 0;
+
+  // pick 15 at random and also randomize question order
+  selected = shuffle(SENTENCES).slice(0, 15);
+  states = selected.map(s => ({ answer: s, wrongCount: 0, solved: false }));
+
+  // create cards
+  selected.forEach((sent, idx) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.setAttribute("role", "listitem");
+
+    const scrambled = scrambleWords(sent);
+
+    card.innerHTML = `
+      <div class="qhead">
+        <div><strong>Q${idx + 1}</strong></div>
+        <div class="scramble" aria-label="Scrambled words">${scrambled}</div>
+      </div>
+      <label for="in-${idx}" class="sr-only">Type the correct sentence</label>
+      <input id="in-${idx}" type="text" autocomplete="off" spellcheck="false" placeholder="Type the sentence exactly…" />
+      <div class="controls">
+        <button class="primary" data-action="check" data-idx="${idx}">Check</button>
+        <button data-action="show" data-idx="${idx}">Show answer</button>
+        <button data-action="clear" data-idx="${idx}">Clear</button>
+      </div>
+      <div id="fb-${idx}" class="feedback" aria-live="polite"></div>
+      <div id="ans-${idx}" class="answer" hidden></div>
+      <small class="hint">Tip: Start with the capitalized word. Don’t forget the period.</small>
+    `;
+
+    quizEl.appendChild(card);
+  });
+
+  updateScore();
+}
+
+function updateScore() {
+  scoreText.innerHTML = `<strong>Score:</strong> ${score}/${selected.length}`;
+}
+
+// Event delegation for buttons
+quizEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const action = btn.dataset.action;
+
+  if (action === "check") handleCheck(idx);
+  else if (action === "show") handleShow(idx);
+  else if (action === "clear") handleClear(idx);
+});
+
+function handleCheck(idx) {
+  const st = states[idx];
+  const input = document.getElementById(`in-${idx}`);
+  const fb = document.getElementById(`fb-${idx}`);
+
+  if (st.solved) return; // already correct
+
+  const user = input.value.trim();
+  const correct = st.answer;
+
+  if (user === correct) {
+    st.solved = true;
+    fb.textContent = "Correct!";
+    fb.className = "feedback correct";
+    score++;
+    updateScore();
+  } else {
+    // alternate between two wrong feedback messages
+    const msg = (st.wrongCount % 2 === 0) ? "Sorry, that is incorrect." : "No, that's wrong.";
+    fb.textContent = msg;
+    fb.className = "feedback incorrect";
+    st.wrongCount++;
+  }
+}
+
+function handleShow(idx) {
+  const ans = document.getElementById(`ans-${idx}`);
+  ans.textContent = states[idx].answer;
+  ans.hidden = false;
+}
+
+function handleClear(idx) {
+  const input = document.getElementById(`in-${idx}`);
+  input.value = "";
+  input.focus();
+}
+
+reloadBtn.addEventListener("click", () => {
+  // Rebuild new randomized set
+  buildQuiz();
+});
+
+// Init
+buildQuiz();
+</script>
+</body>
+</html>
